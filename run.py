@@ -1,6 +1,6 @@
 import numpy as np
 import ibo, embedding
-from pyscf import gto, dft, x2c
+from pyscf import gto, dft, x2c, scf
 from pyscf.socutils import x2camf_hf
 from pyscf.tools import molden
 mol = gto.M(
@@ -19,14 +19,18 @@ H       1.64898979      -0.05366678      -0.00000000
     verbose=4
 )
 
-mf = dft.RKS(mol, xc='b3lyp')
+mf = dft.RKS(mol, xc='bp86')
 mf.kernel()
 ci = mf.mo_coeff[:,mf.mo_occ>0]
 active_atoms = [0,1,2]
 
-mf_spinor = x2c.UKS(mol)
-mf.xc = 'b3lyp'
-mf.with_x2c = x2camf_hf.X2CAMF_UHF(mol, with_gaunt=True, with_breit=True)
-embedding.spinor_embedding(active_atoms, mol, mf, mf_spinor)
+# mf_spinor = x2c.UKS(mol)
+# mf_spinor.xc = 'b3lyp'
+# mf_spinor.with_x2c = x2camf_hf.X2CAMF_UHF(mol, with_gaunt=True, with_breit=True)
+# embedding.spinor_embedding(active_atoms, mol, mf, mf_spinor)
 
-# embedding.scalar_embedding(active_atoms, mol, mf, mf)
+mf_exact = dft.RKS(mol, xc='bp86')
+embedding.scalar_embedding(active_atoms, mol, mf, mf_exact, Huzinaga = False)
+
+# mf_scalar = dft.RKS(mol, xc='b3lyp')
+# embedding.scalar_embedding(active_atoms, mol, mf, mf_scalar)
