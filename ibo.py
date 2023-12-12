@@ -1,38 +1,30 @@
 import numpy as np
-from pyscf import gto, dft, x2c
-from pyscf.tools import molden
-from pyscf.lo.ibo import ibo as ibo_pyscf
-from pyscf.lo.iao import iao as iao_pyscf
+import scipy
+from numpy import dot as matmul
+from pyscf import gto
 from pyscf.lo.iao import reference_mol
 from scipy.linalg import sqrtm
-
-def mdot(*args):
-   """chained matrix product: mdot(A,B,C,..) = A*B*C*...
-   No attempt is made to optimize the contraction order."""
-   r = args[0]
-   for a in args[1:]:
-      r = np.dot(r,a)
-   return r
+from functools import reduce
 
 def sqrtminv(A):
-   return np.linalg.inv(sqrtm(A))
+   return scipy.linalg.inv(sqrtm(A))
 
 def SymOrth(C,S=1):
    """symmetrically orthogonalize orbitals C with respect to overlap
    matrix S (i.e., such that Cnew^T S Cnew == id)."""
-   return np.dot(C, sqrtminv(mdot(C.T.conj(),S,C)))
+   return matmul(C, sqrtminv(reduce(matmul, (C.T.conj(),S,C))))
 
 def get_iao_fromS(s1, s2, s12, coeff):
     nbas = s1.shape[0]
-    s1inv = np.linalg.inv(s1)
-    s2inv = np.linalg.inv(s2)
+    s1inv = scipy.linalg.inv(s1)
+    s2inv = scipy.linalg.inv(s2)
     
-    coeff_tilde = SymOrth(mdot(s1inv,s12,s2inv,s12.T.conj(),coeff), s1)
+    coeff_tilde = SymOrth(reduce(matmul, (s1inv,s12,s2inv,s12.T.conj(),coeff)), s1)
     
-    Oi1 = mdot(coeff, coeff.T.conj(), s1)
-    Oti1 = mdot(coeff_tilde, coeff_tilde.T.conj(), s1)
+    Oi1 = reduce(matmul, (coeff, coeff.T.conj(), s1))
+    Oti1 = reduce(matmul, (coeff_tilde, coeff_tilde.T.conj(), s1))
     
-    iao = mdot(Oi1, Oti1, s1inv, s12) + mdot(np.eye(nbas)-Oi1, np.eye(nbas)-Oti1, s1inv, s12)
+    iao = reduce(matmul, (Oi1, Oti1, s1inv, s12)) + reduce(matmul, (np.eye(nbas)-Oi1, np.eye(nbas)-Oti1, s1inv, s12))
     return SymOrth(iao, s1)
 
 def get_iao(mol, mo_occ):
@@ -43,7 +35,7 @@ def get_iao(mol, mo_occ):
     return get_iao_fromS(s1, s2, s12, mo_occ)
 
 def get_ibo_scalar(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold):
-    Ca = mdot(iao.T.conj(), ovlp, coeff)
+    Ca = reduce(matmul, (iao.T.conj(), ovlp, coeff))
     Ni = Ca.shape[1]
     NAtom = len(ao_slices_minao)
     assert ao_slices_minao[NAtom-1][3] == Ca.shape[0], \
@@ -62,9 +54,9 @@ def get_ibo_scalar(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold)
                     aend = ao_slices_minao[aa][3]
                     Cia = Ci[astart:aend]
                     Cja = Cj[astart:aend]
-                    Qii = mdot(Cia.T.conj(), Cia)
-                    Qjj = mdot(Cja.T.conj(), Cja)
-                    Qij = mdot(Cia.T.conj(), Cja)
+                    Qii = matmul(Cia.T.conj(), Cia)
+                    Qjj = matmul(Cja.T.conj(), Cja)
+                    Qij = matmul(Cia.T.conj(), Cja)
                     Bvalue += 0.5*p*Qij*(Qii**(p-1) - Qjj**(p-1))
                     Avalue += 0.25*p*(p-1)*Qij**2*(Qii**(p-2) + Qjj**(p-2)) \
                             - 0.125*p*(Qii**(p-1) - Qjj**(p-1))*(Qii-Qjj)
@@ -84,10 +76,10 @@ def get_ibo_scalar(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold)
         print("ERROR: IBO localization not converged!")
         exit()
              
-    return mdot(iao, SymOrth(Ca))
+    return matmul(iao, SymOrth(Ca))
 
 def get_ibo_spinor(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold):
-    Ca = mdot(iao.T.conj(), ovlp, coeff)
+    Ca = reduce(matmul, (iao.T.conj(), ovlp, coeff))
     Ni = Ca.shape[1]
     NAtom = len(ao_slices_minao)
     assert ao_slices_minao[NAtom-1][3] == Ca.shape[0], \
@@ -107,9 +99,9 @@ def get_ibo_spinor(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold)
                     aend = ao_slices_minao[aa][3]
                     Cia = Ci[astart:aend]
                     Cja = Cj[astart:aend]
-                    Qii = (mdot(Cia.T.conj(), Cia)).real
-                    Qjj = (mdot(Cja.T.conj(), Cja)).real
-                    Qij = mdot(Cia.T.conj(), Cja)
+                    Qii = (matmul(Cia.T.conj(), Cia)).real
+                    Qjj = (matmul(Cja.T.conj(), Cja)).real
+                    Qij = matmul(Cia.T.conj(), Cja)
                     ReQij = Qij.real
                     ImQij = Qij.imag
                     
@@ -126,9 +118,9 @@ def get_ibo_spinor(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold)
                     aend = ao_slices_minao[aa][3]
                     Cia = Ci[astart:aend]
                     Cja = Cj[astart:aend]
-                    Qii = (mdot(Cia.T.conj(), Cia)).real
-                    Qjj = (mdot(Cja.T.conj(), Cja)).real
-                    Qij = mdot(Cia.T.conj(), Cja)
+                    Qii = (matmul(Cia.T.conj(), Cia)).real
+                    Qjj = (matmul(Cja.T.conj(), Cja)).real
+                    Qij = matmul(Cia.T.conj(), Cja)
                     ReExp2itQij = Qij.real*c2t - Qij.imag*s2t
                     Bvalue += 0.5*p*ReExp2itQij*(Qii**(p-1) - Qjj**(p-1))
                     Avalue += 0.25*p*(p-1)*ReExp2itQij**2*(Qii**(p-2) + Qjj**(p-2))\
@@ -149,7 +141,7 @@ def get_ibo_spinor(ovlp, ao_slices_minao, coeff, iao, p, maxiter, gradthreshold)
         print("ERROR: IBO localization not converged!")
         exit()
              
-    return mdot(iao, SymOrth(Ca))
+    return matmul(iao, SymOrth(Ca))
 
 def get_ibo(mol, mo_occ, p=4, maxiter = 200, gradthreshold = 1e-8, spinor = False):
     mol_minao = reference_mol(mol, 'minao')
