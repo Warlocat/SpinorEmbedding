@@ -9,7 +9,7 @@ def diis_error(f,d,s):
     fds = fds - fds.T.conj()
     return fds.reshape(size*size)
 
-def myscf_solver(mol, mf, ovlp, h1e, mo_occ, sd_Huzinage, huzinage_factor, dm0 = None, 
+def myscf_solver(mol, mf, ovlp, h1e, mo_occ, sd_Huzinage, huzinage_factor, ao_keep = None, dm0 = None, 
                  diis_start=None, diis_size=None, max_cycle = None, tol = None, damping_factor = 0.5):
     if(diis_start is None):
         diis_start = mf.diis_start_cycle
